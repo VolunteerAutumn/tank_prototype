@@ -135,7 +135,6 @@ public:
             {
                 if (b.getX() == e.getX())
                 {
-                    // original detection
                     if (b.getY() == e.getY())
                     {
                         b.deactivate();
@@ -143,7 +142,6 @@ public:
                         score += 10;
                     }
 
-                    // predictive detection (your idea)
                     else if (nextY == e.getY())
                     {
                         b.deactivate();
