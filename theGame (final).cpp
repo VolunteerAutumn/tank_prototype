@@ -10,11 +10,17 @@ using namespace std;
 const int WIDTH = 10;
 const int HEIGHT = 20;
 
+void gotoXY(int x, int y)
+{
+    COORD coord;
+    coord.X = x;
+    coord.Y = y;
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), coord);
+}
+
 class Point
 {
-private:
-    int x;
-    int y;
+    int x, y;
 
 public:
     Point(int x = 0, int y = 0) : x(x), y(y) {}
@@ -37,7 +43,6 @@ public:
 
 class Bullet
 {
-private:
     Point pos;
     bool active;
 
@@ -51,11 +56,6 @@ public:
 
     void deactivate() { active = false; }
 
-    int nextY()
-    {
-        return pos.getY() - 1;
-    }
-
     void move()
     {
         pos.move(0, -1);
@@ -66,7 +66,6 @@ public:
 
 class Enemy
 {
-private:
     Point pos;
 
 public:
@@ -91,7 +90,6 @@ public:
 
 class Game
 {
-private:
     int tankX;
     int score;
 
@@ -123,46 +121,53 @@ public:
         bullets.push_back(Bullet(tankX, HEIGHT - 2));
     }
 
-    void update()
+    void spawnEnemy()
     {
-        for (auto& b : bullets)
-        {
-            if (!b.isActive()) continue;
+        enemies.push_back(Enemy());
+    }
 
-            int nextY = b.getY() - 1;
+    int enemyCount()
+    {
+        return enemies.size();
+    }
 
-            for (auto& e : enemies)
-            {
-                if (b.getX() == e.getX())
-                {
-                    if (b.getY() == e.getY())
-                    {
-                        b.deactivate();
-                        e.respawn();
-                        score += 10;
-                    }
-
-                    else if (nextY == e.getY())
-                    {
-                        b.deactivate();
-                        e.respawn();
-                        score += 10;
-                    }
-                }
-            }
-        }
-
+    void moveBullets()
+    {
         for (auto& b : bullets)
             if (b.isActive())
                 b.move();
-
-        for (auto& e : enemies)
-            e.fall();
 
         bullets.erase(
             remove_if(bullets.begin(), bullets.end(),
                 [](Bullet& b) { return !b.isActive(); }),
             bullets.end());
+    }
+
+    void moveEnemies()
+    {
+        for (auto& e : enemies)
+            e.fall();
+    }
+
+    void checkCollisions()
+    {
+        for (auto& b : bullets)
+        {
+            if (!b.isActive()) continue;
+
+            for (auto& e : enemies)
+            {
+                int nextBulletY = b.getY() - 1;
+
+                if (b.getX() == e.getX() &&
+                    (b.getY() == e.getY() || nextBulletY == e.getY()))
+                {
+                    b.deactivate();
+                    e.respawn();
+                    score += 10;
+                }
+            }
+        }
     }
 
     bool gameOver()
@@ -172,7 +177,8 @@ public:
             if (e.getY() >= HEIGHT - 1)
                 return true;
 
-            if (e.getY() == HEIGHT - 1 && e.getX() == tankX)
+            if (e.getY() == HEIGHT - 1 &&
+                e.getX() == tankX)
                 return true;
         }
 
@@ -181,9 +187,9 @@ public:
 
     void draw()
     {
-        system("cls");
+        gotoXY(0, 0);
 
-        cout << "0123456789" << endl;
+        cout << "0123456789\n";
 
         for (int y = 0; y < HEIGHT; y++)
         {
@@ -202,9 +208,7 @@ public:
 
                 for (auto& b : bullets)
                 {
-                    if (b.isActive() &&
-                        b.getX() == x &&
-                        b.getY() == y)
+                    if (b.getX() == x && b.getY() == y)
                     {
                         cout << "|";
                         printed = true;
@@ -214,15 +218,16 @@ public:
                 if (!printed)
                 {
                     if (y == HEIGHT - 1 && x == tankX)
-                        cout << "Δ";
+                        cout << "T";
                     else
                         cout << " ";
                 }
             }
-            cout << endl;
+            cout << "\n";
         }
-        cout << "0123456789" << endl;
-        cout << "\nScore: " << score << endl;
+
+        cout << "0123456789\n";
+        cout << "\nScore: " << score << "\n";
         cout << "Controls: <- -> move | SPACE shoot | ESC quit\n";
     }
 };
@@ -231,20 +236,66 @@ int main()
 {
     srand(time(0));
 
+    CONSOLE_CURSOR_INFO cursorInfo;
+    cursorInfo.dwSize = 1;
+    cursorInfo.bVisible = FALSE;
+    SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursorInfo);
+
     Game game;
-    game.draw();
+
+    int bulletTimer = 0;
+    int enemyTimer = 0;
+    int difficultyTimer = 0;
+
+    int enemyFallDelay = 700;
+    int maxEnemies = 3;
 
     while (true)
     {
-        char key = _getch();
+        if (_kbhit())
+        {
+            char key = _getch();
 
-        if (key == 27) break;
+            if (key == 224)
+                key = _getch();
 
-        if (key == 75) game.moveTankLeft();
-        if (key == 77) game.moveTankRight();
-        if (key == ' ') game.shoot();
+            if (key == 75) game.moveTankLeft();
+            if (key == 77) game.moveTankRight();
+            if (key == ' ') game.shoot();
+            if (key == 27) break;
+        }
 
-        game.update();
+        bulletTimer += 50;
+        enemyTimer += 50;
+        difficultyTimer += 50;
+
+        if (bulletTimer >= 60)
+        {
+            game.moveBullets();
+            bulletTimer = 0;
+        }
+
+        if (enemyTimer >= enemyFallDelay)
+        {
+            game.moveEnemies();
+            enemyTimer = 0;
+        }
+
+        if (difficultyTimer >= 10000)
+        {
+            difficultyTimer = 0;
+
+            if (enemyFallDelay > 200)
+                enemyFallDelay -= 100;
+
+            if (game.enemyCount() < maxEnemies + 1)
+            {
+                game.spawnEnemy();
+                maxEnemies++;
+            }
+        }
+
+        game.checkCollisions();
 
         if (game.gameOver())
         {
@@ -254,5 +305,7 @@ int main()
         }
 
         game.draw();
+
+        Sleep(50);
     }
 }
